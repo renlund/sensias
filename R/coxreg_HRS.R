@@ -7,11 +7,13 @@
 ##' @param surv name of response 'Surv'-variable in data set
 ##' @param main name of main effect (binary)
 ##' @param terms vector of terms to adjust for (can be named)
-##' @param decr logical
+##' @param decr.inc logical; decreasing order for sequential inclusion?
+##' @param decr.exc logical; decreasing order for sequential exclusion?
 ##' @param rms use \code{rms::cph} instead of \code{survival::coxph}? (mainly if
 ##'     xtra.adj contains something specific to the rms package)
 ##' @export
-coxreg_HRS <- function(data, surv, main, terms, decr = FALSE,
+coxreg_HRS <- function(data, surv, main, terms,
+                       decr.inc = NULL, decr.exc = NULL,
                        rms = FALSE){
     ## set modeling function
     modelFNC <- if(rms){
@@ -47,14 +49,14 @@ coxreg_HRS <- function(data, surv, main, terms, decr = FALSE,
     upd <- function(f, s, op = " + ") paste0(f, op, s)
     ## get unadjusted effect of main
     est <- Smod$coefficients[1]
-    se <-  Smod$var[1,1]
+    se <-  sqrt(Smod$var[1,1])
     UNADJ <- data.frame(term = "(none)",
                         HR = exp(est),
                         HR.l = exp(est - 1.96*se),
                         HR.h = exp(est + 1.96*se))
     ## get adjusted effect of main
     est <- Lmod$coefficients[1]
-    se <-  Lmod$var[1,1]
+    se <-  sqrt(Lmod$var[1,1])
     ADJ <- data.frame(term = "(all)",
                       HR = exp(est),
                       HR.l = exp(est - 1.96*se),
@@ -64,7 +66,7 @@ coxreg_HRS <- function(data, surv, main, terms, decr = FALSE,
     for(i in seq_along(terms)){ ## i = 1
         mtmp <- modelFNC(formula(upd(Sf, terms[i])), data = data)
         est <- mtmp$coefficients[1]
-        se <-  mtmp$var[1,1]
+        se <-  sqrt(mtmp$var[1,1])
         df <- data.frame(term = names(terms)[i],
                          HR = exp(est),
                          HR.l = exp(est - 1.96*se),
@@ -72,8 +74,18 @@ coxreg_HRS <- function(data, surv, main, terms, decr = FALSE,
         P <- if(is.null(P)) df else rbind(P, df)
     }
     rownames(P) <- NULL
+    ## determine decr-parameters
+    if(is.null(decr.inc) & is.null(decr.exc)){
+        decr.inc <- UNADJ$HR - ADJ$HR > 0
+        decr.exc <- !decr.inc
+    }
     ## get HR from model of sequential inclusion
     Q <- UNADJ
+    if(is.null(decr.inc) & Q$HR >= 1){
+        decr.inc <- FALSE
+    } else {
+        decr.inc <- TRUE
+    }
     f <- Sf
     curr.terms <- terms
     for(dummy in seq_along(terms)){ ## dummy = 1
@@ -82,14 +94,14 @@ coxreg_HRS <- function(data, surv, main, terms, decr = FALSE,
             mtmp <- modelFNC(formula(upd(f, curr.terms[i], "+")),
                                     data = data)
             est <- mtmp$coefficients[1]
-            se <-  mtmp$var[1,1]
+            se <-  sqrt(mtmp$var[1,1])
             df <- data.frame(term = names(curr.terms)[i],
                              HR = exp(est),
                              HR.l = exp(est - 1.96*se),
                              HR.h = exp(est + 1.96*se))
             X <- if(is.null(X)) df else rbind(X, df)
         }
-        indx <- order(X$HR, decreasing = decr)
+        indx <- order(X$HR, decreasing = decr.inc)
         X <- X[indx, ]
         val <- curr.terms[indx][1]
         Q <- if(is.null(Q)) X[1,] else rbind(Q, X[1,])
@@ -100,6 +112,11 @@ coxreg_HRS <- function(data, surv, main, terms, decr = FALSE,
     rownames(Q) <- NULL
     ## get HR from model of sequential exclusion
     R <- ADJ
+    if(is.null(decr.exc) & R$HR >= 1){
+        decr.exc <- FALSE
+    } else {
+        decr.exc <- TRUE
+    }
     f <- Lf
     curr.terms <- terms
     for(dummy in seq_along(terms)){ ## dummy = 1
@@ -108,14 +125,14 @@ coxreg_HRS <- function(data, surv, main, terms, decr = FALSE,
             mtmp <- modelFNC(formula(upd(f, curr.terms[i], "-")),
                                     data = data)
             est <- mtmp$coefficients[1]
-            se <-  mtmp$var[1,1]
+            se <-  sqrt(mtmp$var[1,1])
             df <- data.frame(term = names(curr.terms)[i],
                              HR = exp(est),
                              HR.l = exp(est - 1.96*se),
                              HR.h = exp(est + 1.96*se))
             X <- if(is.null(X)) df else rbind(X, df)
         }
-        indx <- order(X$HR, decreasing = !decr)
+        indx <- order(X$HR, decreasing = decr.exc)
         X <- X[indx, ]
         val <- curr.terms[indx][1]
         R <- if(is.null(R)) X[1,] else rbind(R, X[1,])

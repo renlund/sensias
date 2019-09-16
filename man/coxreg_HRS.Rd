@@ -4,7 +4,8 @@
 \alias{coxreg_HRS}
 \title{treatment HR changes}
 \usage{
-coxreg_HRS(data, surv, main, terms, decr = FALSE, rms = FALSE)
+coxreg_HRS(data, surv, main, terms, decr.inc = NULL, decr.exc = NULL,
+  rms = FALSE)
 }
 \arguments{
 \item{data}{data frame}
@@ -15,7 +16,9 @@ coxreg_HRS(data, surv, main, terms, decr = FALSE, rms = FALSE)
 
 \item{terms}{vector of terms to adjust for (can be named)}
 
-\item{decr}{logical}
+\item{decr.inc}{logical; decreasing order for sequential inclusion?}
+
+\item{decr.exc}{logical; decreasing order for sequential exclusion?}
 
 \item{rms}{use \code{rms::cph} instead of \code{survival::coxph}? (mainly if
 xtra.adj contains something specific to the rms package)}
