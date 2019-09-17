@@ -1,18 +1,25 @@
 ##' treatment HR changes
 ##'
-##' examine changes in main effect (HR, Cox regression) when covariates are
-##'     added one at a time, sequentially increasing (starting from a small
-##'     model) or sequentially decreasing (starting from large model)
+##' examine  changes in  main effect  (HR, Cox  regression) when  covariates are
+##'     added one at a time; in solation, sequentially increasing (starting from
+##'     a small model), or sequentially decreasing (starting from large model)
 ##' @param data data frame
 ##' @param surv name of response 'Surv'-variable in data set
 ##' @param main name of main effect (binary)
 ##' @param terms vector of terms to adjust for (can be named)
+##' @param uni logical; include each term's 'univariate' effect on main?
+##' @param inc logical; include each  term's effect, by sequential inclusion, on
+##'     main?
+##' @param exc logical; include each  term's effect, by sequential exclusion, on
+##'     main?
 ##' @param decr.inc logical; decreasing order for sequential inclusion?
 ##' @param decr.exc logical; decreasing order for sequential exclusion?
 ##' @param rms use \code{rms::cph} instead of \code{survival::coxph}? (mainly if
 ##'     xtra.adj contains something specific to the rms package)
+##' @return a list of data frames
 ##' @export
 coxreg_HRS <- function(data, surv, main, terms,
+                       uni = TRUE, inc = TRUE, exc = TRUE,
                        decr.inc = NULL, decr.exc = NULL,
                        rms = FALSE){
     ## set modeling function
@@ -62,89 +69,135 @@ coxreg_HRS <- function(data, surv, main, terms,
                       HR.l = exp(est - 1.96*se),
                       HR.h = exp(est + 1.96*se))
     ## get main + univariate adjustments HRs
-    P <- UNADJ
-    for(i in seq_along(terms)){ ## i = 1
-        mtmp <- modelFNC(formula(upd(Sf, terms[i])), data = data)
-        est <- mtmp$coefficients[1]
-        se <-  sqrt(mtmp$var[1,1])
-        df <- data.frame(term = names(terms)[i],
-                         HR = exp(est),
-                         HR.l = exp(est - 1.96*se),
-                         HR.h = exp(est + 1.96*se))
-        P <- if(is.null(P)) df else rbind(P, df)
+    if(uni){
+        P <- UNADJ
+        for(i in seq_along(terms)){ ## i = 1
+            mtmp <- modelFNC(formula(upd(Sf, terms[i])), data = data)
+            est <- mtmp$coefficients[1]
+            se <-  sqrt(mtmp$var[1,1])
+            df <- data.frame(term = names(terms)[i],
+                             HR = exp(est),
+                             HR.l = exp(est - 1.96*se),
+                             HR.h = exp(est + 1.96*se))
+            P <- if(is.null(P)) df else rbind(P, df)
+        }
+        rownames(P) <- NULL
     }
-    rownames(P) <- NULL
     ## determine decr-parameters
     if(is.null(decr.inc) & is.null(decr.exc)){
         decr.inc <- UNADJ$HR - ADJ$HR > 0
         decr.exc <- !decr.inc
     }
-    ## get HR from model of sequential inclusion
-    Q <- UNADJ
-    if(is.null(decr.inc) & Q$HR >= 1){
-        decr.inc <- FALSE
-    } else {
-        decr.inc <- TRUE
-    }
-    f <- Sf
-    curr.terms <- terms
-    for(dummy in seq_along(terms)){ ## dummy = 1
-        X <- NULL
-        for(i in seq_along(curr.terms)){ ## i =1
-            mtmp <- modelFNC(formula(upd(f, curr.terms[i], "+")),
-                                    data = data)
-            est <- mtmp$coefficients[1]
-            se <-  sqrt(mtmp$var[1,1])
-            df <- data.frame(term = names(curr.terms)[i],
-                             HR = exp(est),
+    if(inc){
+        ## get HR from model of sequential inclusion
+        Q <- UNADJ
+        if(is.null(decr.inc) & Q$HR >= 1){
+            decr.inc <- FALSE
+        } else {
+            decr.inc <- TRUE
+        }
+        f <- Sf
+        curr.terms <- terms
+        for(dummy in seq_along(terms)){ ## dummy = 1
+            X <- NULL
+            for(i in seq_along(curr.terms)){ ## i =1
+                mtmp <- modelFNC(formula(upd(f, curr.terms[i], "+")),
+                                 data = data)
+                est <- mtmp$coefficients[1]
+                se <-  sqrt(mtmp$var[1,1])
+                df <- data.frame(term = names(curr.terms)[i],
+                                 HR = exp(est),
                              HR.l = exp(est - 1.96*se),
                              HR.h = exp(est + 1.96*se))
-            X <- if(is.null(X)) df else rbind(X, df)
+                X <- if(is.null(X)) df else rbind(X, df)
+            }
+            indx <- order(X$HR, decreasing = decr.inc)
+            X <- X[indx, ]
+            val <- curr.terms[indx][1]
+            Q <- if(is.null(Q)) X[1,] else rbind(Q, X[1,])
+            curr.terms <- setNames(setdiff(curr.terms, val),
+                                   nm = setdiff(names(curr.terms), names(val)))
+            f <- upd(f, val)
         }
-        indx <- order(X$HR, decreasing = decr.inc)
-        X <- X[indx, ]
-        val <- curr.terms[indx][1]
-        Q <- if(is.null(Q)) X[1,] else rbind(Q, X[1,])
-        curr.terms <- setNames(setdiff(curr.terms, val),
-                               nm = setdiff(names(curr.terms), names(val)))
-        f <- upd(f, val)
+        rownames(Q) <- NULL
     }
-    rownames(Q) <- NULL
-    ## get HR from model of sequential exclusion
-    R <- ADJ
-    if(is.null(decr.exc) & R$HR >= 1){
-        decr.exc <- FALSE
-    } else {
-        decr.exc <- TRUE
-    }
-    f <- Lf
-    curr.terms <- terms
-    for(dummy in seq_along(terms)){ ## dummy = 1
-        X <- NULL
-        for(i in seq_along(curr.terms)){ ## i =1
-            mtmp <- modelFNC(formula(upd(f, curr.terms[i], "-")),
-                                    data = data)
-            est <- mtmp$coefficients[1]
-            se <-  sqrt(mtmp$var[1,1])
-            df <- data.frame(term = names(curr.terms)[i],
-                             HR = exp(est),
-                             HR.l = exp(est - 1.96*se),
-                             HR.h = exp(est + 1.96*se))
-            X <- if(is.null(X)) df else rbind(X, df)
+    if(exc){
+        ## get HR from model of sequential exclusion
+        R <- ADJ
+        if(is.null(decr.exc) & R$HR >= 1){
+            decr.exc <- FALSE
+        } else {
+            decr.exc <- TRUE
         }
-        indx <- order(X$HR, decreasing = decr.exc)
-        X <- X[indx, ]
-        val <- curr.terms[indx][1]
-        R <- if(is.null(R)) X[1,] else rbind(R, X[1,])
-        curr.terms <- setNames(setdiff(curr.terms, val),
-                               nm = setdiff(names(curr.terms), names(val)))
-        f <- upd(f, val)
+        f <- Lf
+        curr.terms <- terms
+        for(dummy in seq_along(terms)){ ## dummy = 1
+            X <- NULL
+            for(i in seq_along(curr.terms)){ ## i =1
+                mtmp <- modelFNC(formula(upd(f, curr.terms[i], "-")),
+                                 data = data)
+                est <- mtmp$coefficients[1]
+                se <-  sqrt(mtmp$var[1,1])
+                df <- data.frame(term = names(curr.terms)[i],
+                                 HR = exp(est),
+                                 HR.l = exp(est - 1.96*se),
+                                 HR.h = exp(est + 1.96*se))
+                X <- if(is.null(X)) df else rbind(X, df)
+            }
+            indx <- order(X$HR, decreasing = decr.exc)
+            X <- X[indx, ]
+            val <- curr.terms[indx][1]
+            R <- if(is.null(R)) X[1,] else rbind(R, X[1,])
+            curr.terms <- setNames(setdiff(curr.terms, val),
+                                   nm = setdiff(names(curr.terms), names(val)))
+            f <- upd(f, val)
+        }
+        rownames(R) <- NULL
     }
-    rownames(R) <- NULL
     ## return list of results
-    list(
-        "univariate" = P,
-        "sequential_inclusion" = Q,
-        "sequential_exclusion" = R
-    )
+    ## list(
+    ##     "univariate" = P,
+    ##     "sequential_inclusion" = Q,
+    ##     "sequential_exclusion" = R
+    ## )
+    L <- as.list(NULL)
+    if(uni) L$univariate <- P
+    if(inc) L$sequential_inclusion <- Q
+    if(exc) L$sequential_exclusion <- R
+    L
+}
+
+if(FALSE){
+
+    ## test data for coxreg_HRS
+    TMP = readRDS("ignore/hrs-list.Rds")
+    data = TMP$data
+    main = TMP$main
+    surv = TMP$survs[1]
+    terms = TMP$terms
+    decr.inc = NULL
+    decr.exc = NULL
+    rms = FALSE
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = TRUE, inc = TRUE, exc = TRUE,
+               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = TRUE, inc = FALSE, exc = FALSE,
+               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = FALSE, inc = TRUE, exc = FALSE,
+               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = FALSE, inc = FALSE, exc = TRUE,
+               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = FALSE, inc = FALSE, exc = FALSE,
+               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
+
+
 }

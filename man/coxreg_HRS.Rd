@@ -4,8 +4,8 @@
 \alias{coxreg_HRS}
 \title{treatment HR changes}
 \usage{
-coxreg_HRS(data, surv, main, terms, decr.inc = NULL, decr.exc = NULL,
-  rms = FALSE)
+coxreg_HRS(data, surv, main, terms, uni = TRUE, inc = TRUE,
+  exc = TRUE, decr.inc = NULL, decr.exc = NULL, rms = FALSE)
 }
 \arguments{
 \item{data}{data frame}
@@ -16,6 +16,14 @@ coxreg_HRS(data, surv, main, terms, decr.inc = NULL, decr.exc = NULL,
 
 \item{terms}{vector of terms to adjust for (can be named)}
 
+\item{uni}{logical; include each term's 'univariate' effect on main?}
+
+\item{inc}{logical; include each  term's effect, by sequential inclusion, on
+main?}
+
+\item{exc}{logical; include each  term's effect, by sequential exclusion, on
+main?}
+
 \item{decr.inc}{logical; decreasing order for sequential inclusion?}
 
 \item{decr.exc}{logical; decreasing order for sequential exclusion?}
@@ -23,8 +31,11 @@ coxreg_HRS(data, surv, main, terms, decr.inc = NULL, decr.exc = NULL,
 \item{rms}{use \code{rms::cph} instead of \code{survival::coxph}? (mainly if
 xtra.adj contains something specific to the rms package)}
 }
+\value{
+a list of data frames
+}
 \description{
-examine changes in main effect (HR, Cox regression) when covariates are
-    added one at a time, sequentially increasing (starting from a small
-    model) or sequentially decreasing (starting from large model)
+examine  changes in  main effect  (HR, Cox  regression) when  covariates are
+    added one at a time; in solation, sequentially increasing (starting from
+    a small model), or sequentially decreasing (starting from large model)
 }
