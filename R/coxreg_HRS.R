@@ -47,9 +47,16 @@ coxreg_HRS <- function(data, surv, main, terms,
         real <- setdiff(real, "outcome")
     } else stop("'surv' argument in strange form")
     ## model formula
-    Sf <- paste0(surv, " ~ ", main)
-    Lf <- paste0(surv, " ~ ", main, " + ",
-                 paste0(terms, collapse = " + "))
+    ffnc <- function(ts = NULL){
+        paste0(surv, " ~ ", main,
+               if(length(ts) != 0) " + " else NULL,
+               paste0(ts, collapse = " + "))
+    }
+    Sf <- ffnc()
+    Lf <- ffnc(terms)
+    ## Sf <- paste0(surv, " ~ ", main) ## REMOVE
+    ## Lf <- paste0(surv, " ~ ", main, " + ",
+    ##              paste0(terms, collapse = " + "))
     Smod <- modelFNC(formula(Sf), data = data)
     Lmod <- modelFNC(formula(Lf), data = data)
     ## update function
@@ -70,7 +77,7 @@ coxreg_HRS <- function(data, surv, main, terms,
                       HR.h = exp(est + 1.96*se))
     ## get main + univariate adjustments HRs
     if(uni){
-        P <- UNADJ
+        UNI <- UNADJ
         for(i in seq_along(terms)){ ## i = 1
             mtmp <- modelFNC(formula(upd(Sf, terms[i])), data = data)
             est <- mtmp$coefficients[1]
@@ -79,23 +86,23 @@ coxreg_HRS <- function(data, surv, main, terms,
                              HR = exp(est),
                              HR.l = exp(est - 1.96*se),
                              HR.h = exp(est + 1.96*se))
-            P <- if(is.null(P)) df else rbind(P, df)
+            UNI <- if(is.null(UNI)) df else rbind(UNI, df)
         }
-        rownames(P) <- NULL
+        rownames(UNI) <- NULL
     }
     ## determine decr-parameters
     if(is.null(decr.inc) & is.null(decr.exc)){
-        decr.inc <- UNADJ$HR - ADJ$HR > 0
+        decr.inc <- UNADJ$HR < ADJ$HR
         decr.exc <- !decr.inc
     }
     if(inc){
         ## get HR from model of sequential inclusion
-        Q <- UNADJ
-        if(is.null(decr.inc) & Q$HR >= 1){
-            decr.inc <- FALSE
-        } else {
-            decr.inc <- TRUE
-        }
+        INC <- UNADJ
+        if(is.null(decr.inc)) if(INC$HR >= 1){
+                                  decr.inc <- FALSE
+                              } else {
+                                  decr.inc <- TRUE
+                              }
         f <- Sf
         curr.terms <- terms
         for(dummy in seq_along(terms)){ ## dummy = 1
@@ -114,28 +121,31 @@ coxreg_HRS <- function(data, surv, main, terms,
             indx <- order(X$HR, decreasing = decr.inc)
             X <- X[indx, ]
             val <- curr.terms[indx][1]
-            Q <- if(is.null(Q)) X[1,] else rbind(Q, X[1,])
+            INC <- if(is.null(INC)) X[1,] else rbind(INC, X[1,])
             curr.terms <- setNames(setdiff(curr.terms, val),
                                    nm = setdiff(names(curr.terms), names(val)))
             f <- upd(f, val)
-        }
-        rownames(Q) <- NULL
+    }
+    rownames(INC) <- NULL
     }
     if(exc){
         ## get HR from model of sequential exclusion
-        R <- ADJ
-        if(is.null(decr.exc) & R$HR >= 1){
-            decr.exc <- FALSE
-        } else {
-            decr.exc <- TRUE
-        }
+        EXC <- ADJ
+        if(is.null(decr.exc)) if(EXC$HR >= 1){
+                                  decr.exc <- FALSE
+                              } else {
+                                  decr.exc <- TRUE
+                              }
         f <- Lf
         curr.terms <- terms
         for(dummy in seq_along(terms)){ ## dummy = 1
             X <- NULL
             for(i in seq_along(curr.terms)){ ## i =1
-                mtmp <- modelFNC(formula(upd(f, curr.terms[i], "-")),
+                tmp.terms <- setdiff(curr.terms, curr.terms[i])
+                mtmp <- modelFNC(formula(ffnc(tmp.terms)),
                                  data = data)
+                ## mtmp <- modelFNC(formula(upd(f, curr.terms[i], "-")),
+                ##                  data = data) ## REMOVE
                 est <- mtmp$coefficients[1]
                 se <-  sqrt(mtmp$var[1,1])
                 df <- data.frame(term = names(curr.terms)[i],
@@ -147,23 +157,23 @@ coxreg_HRS <- function(data, surv, main, terms,
             indx <- order(X$HR, decreasing = decr.exc)
             X <- X[indx, ]
             val <- curr.terms[indx][1]
-            R <- if(is.null(R)) X[1,] else rbind(R, X[1,])
+            EXC <- if(is.null(EXC)) X[1,] else rbind(EXC, X[1,])
             curr.terms <- setNames(setdiff(curr.terms, val),
                                    nm = setdiff(names(curr.terms), names(val)))
-            f <- upd(f, val)
+            ## f <- upd(f, val) ## REMOVE
         }
-        rownames(R) <- NULL
+        rownames(EXC) <- NULL
     }
     ## return list of results
     ## list(
-    ##     "univariate" = P,
-    ##     "sequential_inclusion" = Q,
-    ##     "sequential_exclusion" = R
+    ##     "univariate" = UNI,
+    ##     "sequential_inclusion" = INC,
+    ##     "sequential_exclusion" = EXC
     ## )
     L <- as.list(NULL)
-    if(uni) L$univariate <- P
-    if(inc) L$sequential_inclusion <- Q
-    if(exc) L$sequential_exclusion <- R
+    if(uni) L$univariate <- UNI
+    if(inc) L$sequential_inclusion <- INC
+    if(exc) L$sequential_exclusion <- EXC
     L
 }
 
