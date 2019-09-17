@@ -170,43 +170,32 @@ coxreg_bias <- function(data, surv, main,
     R
 }
 
-##-##' coxreg bias plot
-##-##'
-##-##'
-##-##' @param x
-##-##' @param incl.main
-##-##' @param true
-##-##' @return
-##-##' @export
-## XK include this?? is is an ass-load of dependencies
-## cb_plot <- function(x, incl.main = FALSE, true = FALSE){
-##     A <- filter(x, type == "main") %>%
-##         transmute(term, alt = term, eff = 'Effect as-is',
-##                   HR = adjHR, ci1 = adjHR.l, ci2 = adjHR.u)
-##     B <- filter(x, type %in% c("bnry", "real")) %>%
-##         transmute(term, alt = paste0("U as ", term), eff =  'Effect as-is',
-##                   HR = mainHR, ci1 = mainHR.l, ci2 = mainHR.u)
-##     C <- filter(x, type %in% c("bnry", "real")) %>%
-##         transmute(term, alt = paste0("U as ", term), eff = "Inverse effect",
-##                   HR = mainHRinv, ci1 = mainHRinv.l, ci2 = mainHRinv.u)
-##     X <- if(incl.main) rbind(A, B, C) else rbind(B, C)
-##     if(true){
-##         ggplot(X, aes(x = HR, y = 1, xmin = ci1, xmax = ci2)) +
-##             geom_vline(xintercept = 1, lty = 2) +
-##             geom_errorbarh(height = 0.4) +
-##             geom_point()+
-##             scale_x_log10() +
-##             scale_y_continuous(limits = c(0,2), breaks = NULL) +
-##             labs(x = "Hazard ratio", y = NULL) +
-##             facet_grid(alt ~ eff)
-##     } else {
-##         X$alt <- factor(X$alt, levels = rev(unique(X$alt)))
-##         ggplot(X, aes(x = HR, y = alt, xmin = ci1, xmax = ci2)) +
-##             geom_vline(xintercept = 1, lty = 2) +
-##             geom_errorbarh(height = 0.4) +
-##             geom_point()+
-##             scale_x_log10() +
-##             labs(x = "Hazard ratio", y = NULL) +
-##             facet_wrap( ~ eff)
-##     }
-## }
+##' coxreg bias plot data
+##'
+##' helper function to get (what I deem) the important parts of the results of
+##'     \code{coxreg_bias} into a tidy format suitable for plotting
+##' @param x the return of a \code{coxreg_bias} call
+##' @return a data frame
+##' @export
+coxreg_bias2plot <- function(x){
+    ## get effect of main without U
+    A <- subset(x, x$type == "main")
+    A$eff <- 'Effect as-is'
+    A$alt <- "(No U)"
+    A[, c("term", "alt", "eff", "adjHR", "adjHR.l", "adjHR.u")]
+    names(A)[4:6] <- c("HR", "ci1", "ci2")
+    ## get as-is effect of main with U's added
+    B <- subset(x, x$type %in% c("bnry", "real"))
+    B$eff <- 'Effect as-is'
+    B$alt <- paste0("U as ", B$term)
+    B[, c("term", "alt", "eff", "mainHR", "mainHR.l", "mainHR.u")]
+    names(B)[4:6] <- c("HR", "ci1", "ci2")
+    ## get inverse effect of main with U's added
+    C <- subset(x, x$type %in% c("bnry", "real"))
+    C$eff <- 'Inverse effect'
+    C$alt <- paste0("U as ", C$term)
+    C[, c("term", "alt", "eff", "mainHRinv", "mainHRinv.l", "mainHRinv.u")]
+    names(C)[4:6] <- c("HR", "ci1", "ci2")
+    ## rbind and return
+    rbind(A, B, C)
+}
