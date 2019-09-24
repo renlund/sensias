@@ -3,3 +3,5 @@
 export(coxreg_HRS)
 export(coxreg_bias)
 export(coxreg_bias2plot)
+export(updHRbnry)
+export(updHRnorm)

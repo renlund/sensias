@@ -6,7 +6,7 @@
 \usage{
 coxreg_bias(data, surv, main, bnry = NULL, real = NULL,
   xtra.adj = NULL, bnry.manual = NULL, real.manual = NULL,
-  rms = FALSE, verbose = TRUE)
+  rms = FALSE, regfnc = NULL, verbose = TRUE)
 }
 \arguments{
 \item{data}{data frame}
@@ -31,6 +31,10 @@ where each element  is HR, mean at \code{main ==  0}, mean at \code{main
 
 \item{rms}{use \code{rms::cph} instead of \code{survival::coxph}? (mainly if
 xtra.adj contains something specific to the rms package)}
+
+\item{regfnc}{a regression function taking a formula- and data
+argument. Experimental, probably must be a wrapper around \code{coxph}
+in order to work.}
 
 \item{verbose}{logical; send a message if deemed necessary?}
 }

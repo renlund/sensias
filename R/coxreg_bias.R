@@ -16,17 +16,30 @@
 ##'     == 1}
 ##' @param rms use \code{rms::cph} instead of \code{survival::coxph}? (mainly if
 ##'     xtra.adj contains something specific to the rms package)
+##' @param regfnc a regression function taking a formula- and data
+##'     argument. Experimental, probably must be a wrapper around \code{coxph}
+##'     in order to work.
 ##' @param verbose logical; send a message if deemed necessary?
 ##' @export
 coxreg_bias <- function(data, surv, main,
                         bnry = NULL, real = NULL, xtra.adj = NULL,
                         bnry.manual = NULL, real.manual = NULL,
-                        rms = FALSE, verbose = TRUE){
+                        rms = FALSE, regfnc = NULL, verbose = TRUE){
     ## must have something to work with
     if(is.null(bnry) & is.null(real) &
        is.null(bnry.manual) & is.null(real.manual)){
         stop("to much null")
     }
+    ## set modeling function (if rms FALSE)
+    modelFNC <- if(!is.null(regfnc)){
+                    rms <- FALSE
+                    regfnc
+                } else if(rms){
+                    ## looks weird, but the rms function is choose later
+                    survival::coxph
+                } else{
+                    survival::coxph
+                }
     ## have data in data.frame format, so that it can keep a Surv object
     data <- as.data.frame(data, stringsAsFactors = FALSE)
     ## check surv argument
@@ -71,7 +84,8 @@ coxreg_bias <- function(data, surv, main,
                    if(!is.null(xtra.adj)) " + " else NULL,
                    xtra.adj)
     if(!rms){
-        M <- survival::coxph(formula(ftxt), data = D)
+        ## M <- survival::coxph(formula(ftxt), data = D)
+        M <- modelFNC(formula = formula(ftxt), data = D)
         sm <- survival:::summary.coxph(M)
         mod <- data.frame(term = dimnames(sm$conf.int)[[1]],
                         adjHR = sm$conf.int[, "exp(coef)"],
@@ -131,43 +145,96 @@ coxreg_bias <- function(data, surv, main,
     ## similar to the already existing covariates in distribution and HR
     R$mainHRinv.u <- R$mainHRinv.l <- R$mainHRinv <-
         R$mainHR.u <- R$mainHR.l <- R$mainHR <- rep(NA, nrow(R))
-    for(i in 1:nrow(R)){ ## i = 4
+    for(i in 1:nrow(R)){ ## i = 2
         if(is.na(R$type[i]) | !R$type[i] %in% c("bnry", "real")) next
         if(R$type[i] == "bnry"){
-            tmp <- obsSens::obsSensSCC(M, which = 1,
-                                       g0 = R$adjHR[i],
-                                       p0 = R$stat0[i], p1 = R$stat1[i],
-                                       logHaz = FALSE)
-            R$mainHR[i] <- tmp$beta[,,1]
-            R$mainHR.l[i] <- tmp$lcl[,,1]
-            R$mainHR.u[i] <- tmp$ucl[,,1]
-            tmp <- obsSens::obsSensSCC(M, which = 1,
-                                       g0 = 1/R$adjHR[i],
-                                       p0 = R$stat0[i], p1 = R$stat1[i],
-                                       logHaz = FALSE)
-            R$mainHRinv[i] <- tmp$beta[,,1]
-            R$mainHRinv.l[i] <- tmp$lcl[,,1]
-            R$mainHRinv.u[i] <- tmp$ucl[,,1]
+            ## tmp <- obsSens::obsSensSCC(M, which = 1,
+            ##                            g0 = R$adjHR[i],
+            ##                            p0 = R$stat0[i], p1 = R$stat1[i],
+            ##                            logHaz = FALSE)
+            ## R$mainHR[i] <- tmp$beta[,,1]
+            ## R$mainHR.l[i] <- tmp$lcl[,,1]
+            ## R$mainHR.u[i] <- tmp$ucl[,,1]
+            ## tmp <- obsSens::obsSensSCC(M, which = 1,
+            ##                            g0 = 1/R$adjHR[i],
+            ##                            p0 = R$stat0[i], p1 = R$stat1[i],
+            ##                            logHaz = FALSE)
+            ## R$mainHRinv[i] <- tmp$beta[,,1]
+            ## R$mainHRinv.l[i] <- tmp$lcl[,,1]
+            ## R$mainHRinv.u[i] <- tmp$ucl[,,1]
+            foo <- function(HR, inv = FALSE){
+                updHRbnry(HR = HR,
+                       expG = if(inv) 1/R$adjHR[i] else R$adjHR[i],
+                       p0 = R$stat0[i],
+                       p1 = R$stat1[i])
+            }
+            est <- M$coefficients[main]
+            pm <- (qnorm(.975) * sqrt(diag(M$var)))[1]
+            R$mainHR[i] <- foo(HR = exp(est))
+            R$mainHR.l[i] <- foo(HR = exp(est - pm))
+            R$mainHR.u[i] <- foo(HR = exp(est + pm))
+            R$mainHRinv[i] <- foo(HR = exp(est), inv = TRUE)
+            R$mainHRinv.l[i] <- foo(HR = exp(est - pm), inv = TRUE)
+            R$mainHRinv.u[i] <- foo(HR = exp(est + pm), inv = TRUE)
         }
         if(R$type[i] == "real"){
-            tmp <- obsSens::obsSensSCN(M, which = 1,
-                                       gamma = log(R$adjHR[i]),
-                                       delta = R$stat1[i] - R$stat0[i],
-                                       logHaz = FALSE)
-            R$mainHR[i] <- tmp$beta[,1]
-            R$mainHR.l[i] <- tmp$lcl[,1]
-            R$mainHR.u[i] <- tmp$ucl[,1]
-            tmp <- obsSens::obsSensSCN(M, which = 1,
-                                       gamma = log(1/R$adjHR[i]),
-                                       delta = R$stat1[i] - R$stat0[i],
-                                       logHaz = FALSE)
-            R$mainHRinv[i] <- tmp$beta[,1]
-            R$mainHRinv.l[i] <- tmp$lcl[,1]
-            R$mainHRinv.u[i] <- tmp$ucl[,1]
+            ## tmp <- obsSens::obsSensSCN(M, which = 1,
+            ##                            gamma = log(R$adjHR[i]),
+            ##                            delta = R$stat1[i] - R$stat0[i],
+            ##                            logHaz = FALSE)
+            ## R$mainHR[i] <- tmp$beta[,1]
+            ## R$mainHR.l[i] <- tmp$lcl[,1]
+            ## R$mainHR.u[i] <- tmp$ucl[,1]
+            ## tmp <- obsSens::obsSensSCN(M, which = 1,
+            ##                            gamma = log(1/R$adjHR[i]),
+            ##                            delta = R$stat1[i] - R$stat0[i],
+            ##                            logHaz = FALSE)
+            ## R$mainHRinv[i] <- tmp$beta[,1]
+            ## R$mainHRinv.l[i] <- tmp$lcl[,1]
+            ## R$mainHRinv.u[i] <- tmp$ucl[,1]
+            foo <- function(HR, inv = FALSE){
+                updHRnorm(HR = HR,
+                       expG = if(inv) 1/R$adjHR[i] else R$adjHR[i],
+                       m0 = R$stat0[i],
+                       m1 = R$stat1[i])
+            }
+            est <- M$coefficients[main]
+            pm <- (qnorm(.975) * sqrt(diag(M$var)))[1]
+            R$mainHR[i] <- foo(HR = exp(est))
+            R$mainHR.l[i] <- foo(HR = exp(est - pm))
+            R$mainHR.u[i] <- foo(HR = exp(est + pm))
+            R$mainHRinv[i] <- foo(HR = exp(est), inv = TRUE)
+            R$mainHRinv.l[i] <- foo(HR = exp(est - pm), inv = TRUE)
+            R$mainHRinv.u[i] <- foo(HR = exp(est + pm), inv = TRUE)
         }
     }
     attr(R, "formula") <- ftxt
     R
+}
+
+##' bias adjusted HR
+##'
+##' calculate what  treatment HR would be  if we could adjust  for an unmeasured
+##'     binary confounder  U having  proportion p0  and p1  in the  control- and
+##'     treatment group, respectively, and whose HR  on the outcome is expG. The
+##'     formulas   are   from  Lin,   D.   Y.,   Psaty,   B.  M.,   &   Kronmal,
+##'     R.  A.  (1998).  Assessing  the sensitivity  of  regression  results  to
+##'     unmeasured confounders in observational studies. Biometrics, 948-963.
+##' @param HR the treatment HR (to be updated) on the outcome
+##' @param expG the confounder HR on the outcome
+##' @param p0 proportion among controls
+##' @param p1 proportion among cases
+##' @export
+updHRbnry <- function(HR, expG, p0, p1){
+    exp(log(HR) - log((expG * p1 + 1 - p1) / (expG * p0 + 1 - p0)))
+}
+
+##' @describeIn updHRbnry function for when U is normal (instead of binary)
+##' @param m0 mean value among controls
+##' @param m1 mean value among cases
+##' @export
+updHRnorm <- function(HR, expG, m0, m1){
+    exp(log(HR) - log(expG) * (m1 - m0))
 }
 
 ##' coxreg bias plot data
@@ -182,20 +249,29 @@ coxreg_bias2plot <- function(x){
     A <- subset(x, x$type == "main")
     A$eff <- 'Effect as-is'
     A$alt <- "(No U)"
-    A[, c("term", "alt", "eff", "adjHR", "adjHR.l", "adjHR.u")]
+    A <- A[, c("term", "alt", "eff", "adjHR", "adjHR.l", "adjHR.u")]
     names(A)[4:6] <- c("HR", "ci1", "ci2")
     ## get as-is effect of main with U's added
     B <- subset(x, x$type %in% c("bnry", "real"))
     B$eff <- 'Effect as-is'
     B$alt <- paste0("U as ", B$term)
-    B[, c("term", "alt", "eff", "mainHR", "mainHR.l", "mainHR.u")]
+    B <- B[, c("term", "alt", "eff", "mainHR", "mainHR.l", "mainHR.u")]
     names(B)[4:6] <- c("HR", "ci1", "ci2")
     ## get inverse effect of main with U's added
     C <- subset(x, x$type %in% c("bnry", "real"))
     C$eff <- 'Inverse effect'
     C$alt <- paste0("U as ", C$term)
-    C[, c("term", "alt", "eff", "mainHRinv", "mainHRinv.l", "mainHRinv.u")]
+    C <- C[, c("term", "alt", "eff", "mainHRinv", "mainHRinv.l", "mainHRinv.u")]
     names(C)[4:6] <- c("HR", "ci1", "ci2")
-    ## rbind and return
-    rbind(A, B, C)
+    ## rbind
+    R <- rbind(A, B, C)
+    ## give lists of orders as attribute
+    attr(R, "orders") <- list(
+        "asis_dec" = B[order(B$HR, decreasing = TRUE), "alt", drop = TRUE],
+        "asis_inc" = B[order(B$HR, decreasing = FALSE), "alt", drop = TRUE],
+        "inverse_dec" = C[order(C$HR, decreasing = TRUE), "alt", drop = TRUE],
+        "inverse_inc" = C[order(C$HR, decreasing = FALSE), "alt", drop = TRUE]
+    )
+    ## return
+    R
 }
