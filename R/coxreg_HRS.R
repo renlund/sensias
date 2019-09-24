@@ -200,38 +200,3 @@ coxreg_HRS <- function(data, surv, main, terms,
     if(exc) L$sequential_exclusion <- EXC
     L
 }
-
-if(FALSE){
-
-    ## test data for coxreg_HRS
-    TMP = readRDS("ignore/hrs-list.Rds")
-    data = TMP$data
-    main = TMP$main
-    surv = TMP$survs[1]
-    terms = TMP$terms
-    decr.inc = NULL
-    decr.exc = NULL
-    rms = FALSE
-
-    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
-               uni = TRUE, inc = TRUE, exc = TRUE,
-               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
-
-    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
-               uni = TRUE, inc = FALSE, exc = FALSE,
-               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
-
-    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
-               uni = FALSE, inc = TRUE, exc = FALSE,
-               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
-
-    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
-               uni = FALSE, inc = FALSE, exc = TRUE,
-               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
-
-    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
-               uni = FALSE, inc = FALSE, exc = FALSE,
-               decr.inc = NULL, decr.exc = NULL, rms = FALSE)
-
-
-}

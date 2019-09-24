@@ -32,7 +32,6 @@ test_that("'coxreg_bias' works", {
                 real.manual = list("manreal" = c(1.05, 10, 12)),
                 rms = TRUE)
 
-
     surv <- "s1"
     main <- "b1"
     bnry <- c("b2", "b3")
@@ -41,5 +40,6 @@ test_that("'coxreg_bias' works", {
     bnry.manual <- list("manbnry" = c(1.2, 0.1, 0.2))
     real.manual <- list("manreal" = c(1.05, 10, 12))
     rms = FALSE
+    regfnc = NULL
 
 })

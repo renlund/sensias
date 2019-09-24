@@ -34,4 +34,53 @@ test_that("'coxreg_HRS' works", {
     coxreg_HRS(data = data, surv = "s1", main = "b1",
                terms = c("r1", "c1", "rms::rcs(r2)", "b3"),
                decr = FALSE, rms =TRUE)
+
+    if(FALSE){
+            ## test data for coxreg_HRS
+    TMP = readRDS("ignore/hrs-list.Rds")
+    tmp = TMP$data
+    set.seed(20190917)
+    data = tmp[sample(1:nrow(tmp), size = floor(nrow(tmp)/10)), ]
+    main = TMP$main
+    surv = TMP$survs[1]
+    terms = TMP$terms
+    uni = TRUE
+    full = TRUE
+    inc = TRUE
+    exc = TRUE
+    decr.inc = NULL
+    decr.exc = NULL
+    rms = FALSE
+    myFun = function(formula, data){
+        survival::coxph(formula, data, weights = data$ps.w)
+    }
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = TRUE, full = TRUE, inc = TRUE, exc = TRUE,
+               decr.inc = decr.inc, decr.exc = decr.exc, rms = rms)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = TRUE, full = TRUE, inc = TRUE, exc = TRUE,
+               decr.inc = decr.inc, decr.exc = decr.exc, rms = rms,
+               regfnc = myFun)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = TRUE, full = TRUE, inc = FALSE, exc = FALSE,
+               decr.inc = decr.inc, decr.exc = decr.exc, rms = rms)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = FALSE, full = TRUE, inc = TRUE, exc = FALSE,
+               decr.inc = decr.inc, decr.exc = decr.exc, rms = rms)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = FALSE, full = TRUE, inc = FALSE, exc = TRUE,
+               decr.inc = decr.inc, decr.exc = decr.exc, rms = rms)
+
+    coxreg_HRS(data = data, surv = surv, main = main, terms = terms,
+               uni = FALSE, full = TRUE, inc = FALSE, exc = FALSE,
+               decr.inc = decr.inc, decr.exc = decr.exc, rms = rms)
+
+    }
+
+
 })
