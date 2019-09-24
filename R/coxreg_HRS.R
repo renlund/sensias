@@ -1,13 +1,16 @@
 ##' treatment HR changes
 ##'
 ##' examine  changes in  main effect  (HR, Cox  regression) when  covariates are
-##'     added one at a time; in solation, sequentially increasing (starting from
+##'     added one at a time; in solation (both included from minimal model and
+##'     excluded from full model), sequentially increasing (starting from
 ##'     a small model), or sequentially decreasing (starting from large model)
 ##' @param data data frame
 ##' @param surv name of response 'Surv'-variable in data set
 ##' @param main name of main effect (binary)
 ##' @param terms vector of terms to adjust for (can be named)
 ##' @param uni logical; include each term's 'univariate' effect on main?
+##' @param full logical; include each term's 'exclusion from full model'-effect
+##'     on main?
 ##' @param inc logical; include each  term's effect, by sequential inclusion, on
 ##'     main?
 ##' @param exc logical; include each  term's effect, by sequential exclusion, on
@@ -16,14 +19,18 @@
 ##' @param decr.exc logical; decreasing order for sequential exclusion?
 ##' @param rms use \code{rms::cph} instead of \code{survival::coxph}? (mainly if
 ##'     xtra.adj contains something specific to the rms package)
+##' @param regfnc a regression function taking a formula- and data argument
 ##' @return a list of data frames
 ##' @export
 coxreg_HRS <- function(data, surv, main, terms,
-                       uni = TRUE, inc = TRUE, exc = TRUE,
+                       uni = TRUE, full = TRUE,
+                       inc = FALSE, exc = FALSE,
                        decr.inc = NULL, decr.exc = NULL,
-                       rms = FALSE){
+                       rms = FALSE, regfnc = NULL){
     ## set modeling function
-    modelFNC <- if(rms){
+    modelFNC <- if(!is.null(regfnc)){
+                    regfnc
+                } else if(rms){
                     ## rms::cph
                     warning("'rms' not implemented yet")
                     survival::coxph
@@ -57,8 +64,8 @@ coxreg_HRS <- function(data, surv, main, terms,
     ## Sf <- paste0(surv, " ~ ", main) ## REMOVE
     ## Lf <- paste0(surv, " ~ ", main, " + ",
     ##              paste0(terms, collapse = " + "))
-    Smod <- modelFNC(formula(Sf), data = data)
-    Lmod <- modelFNC(formula(Lf), data = data)
+    Smod <- modelFNC(formula = formula(Sf), data = data)
+    Lmod <- modelFNC(formula = formula(Lf), data = data)
     ## update function
     upd <- function(f, s, op = " + ") paste0(f, op, s)
     ## get unadjusted effect of main
@@ -71,7 +78,7 @@ coxreg_HRS <- function(data, surv, main, terms,
     ## get adjusted effect of main
     est <- Lmod$coefficients[1]
     se <-  sqrt(Lmod$var[1,1])
-    ADJ <- data.frame(term = "(all)",
+    ADJ <- data.frame(term = "(none)",
                       HR = exp(est),
                       HR.l = exp(est - 1.96*se),
                       HR.h = exp(est + 1.96*se))
@@ -79,7 +86,7 @@ coxreg_HRS <- function(data, surv, main, terms,
     if(uni){
         UNI <- UNADJ
         for(i in seq_along(terms)){ ## i = 1
-            mtmp <- modelFNC(formula(upd(Sf, terms[i])), data = data)
+            mtmp <- modelFNC(formula = formula(upd(Sf, terms[i])), data = data)
             est <- mtmp$coefficients[1]
             se <-  sqrt(mtmp$var[1,1])
             df <- data.frame(term = names(terms)[i],
@@ -89,6 +96,22 @@ coxreg_HRS <- function(data, surv, main, terms,
             UNI <- if(is.null(UNI)) df else rbind(UNI, df)
         }
         rownames(UNI) <- NULL
+    }
+    ## get full - univariate adjustment HRs
+    if(full){
+        FULL <- ADJ
+        for(i in seq_along(terms)){ ## i = 1
+            but1 <- setdiff(terms, terms[i])
+            mtmp <- modelFNC(formula = formula(ffnc(but1)), data = data)
+            est <- mtmp$coefficients[1]
+            se <-  sqrt(mtmp$var[1,1])
+            df <- data.frame(term = names(terms)[i],
+                             HR = exp(est),
+                             HR.l = exp(est - 1.96*se),
+                             HR.h = exp(est + 1.96*se))
+            FULL <- if(is.null(FULL)) df else rbind(FULL, df)
+        }
+        rownames(FULL) <- NULL
     }
     ## determine decr-parameters
     if(is.null(decr.inc) & is.null(decr.exc)){
@@ -108,7 +131,7 @@ coxreg_HRS <- function(data, surv, main, terms,
         for(dummy in seq_along(terms)){ ## dummy = 1
             X <- NULL
             for(i in seq_along(curr.terms)){ ## i =1
-                mtmp <- modelFNC(formula(upd(f, curr.terms[i], "+")),
+                mtmp <- modelFNC(formula = formula(upd(f, curr.terms[i], "+")),
                                  data = data)
                 est <- mtmp$coefficients[1]
                 se <-  sqrt(mtmp$var[1,1])
@@ -142,9 +165,9 @@ coxreg_HRS <- function(data, surv, main, terms,
             X <- NULL
             for(i in seq_along(curr.terms)){ ## i =1
                 tmp.terms <- setdiff(curr.terms, curr.terms[i])
-                mtmp <- modelFNC(formula(ffnc(tmp.terms)),
+                mtmp <- modelFNC(formula = formula(ffnc(tmp.terms)),
                                  data = data)
-                ## mtmp <- modelFNC(formula(upd(f, curr.terms[i], "-")),
+                ## mtmp <- modelFNC(formula = formula(upd(f, curr.terms[i], "-")),
                 ##                  data = data) ## REMOVE
                 est <- mtmp$coefficients[1]
                 se <-  sqrt(mtmp$var[1,1])
@@ -172,6 +195,7 @@ coxreg_HRS <- function(data, surv, main, terms,
     ## )
     L <- as.list(NULL)
     if(uni) L$univariate <- UNI
+    if(full) L$full <- FULL
     if(inc) L$sequential_inclusion <- INC
     if(exc) L$sequential_exclusion <- EXC
     L
